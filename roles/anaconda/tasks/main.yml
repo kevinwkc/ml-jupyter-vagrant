@@ -1,0 +1,78 @@
+---
+# tasks file for anaconda role
+
+- name: Download anaconda python2 distribution
+  command: wget http://repo.continuum.io/archive/Anaconda2-2.5.0-Linux-x86_64.sh -O /tmp/anaconda.sh
+  when: python_version == "python2"
+
+- name: Download anaconda python3 distribution
+  command: wget http://repo.continuum.io/archive/Anaconda3-2.5.0-Linux-x86_64.sh -O /tmp/anaconda.sh
+  when: python_version == "python3"
+
+- name: Make anaconda distribution file executable
+  command: chmod 755 /tmp/anaconda.sh
+
+- name: Execute the anaconda setup script
+  shell: /tmp/anaconda.sh -b -p {{ anaconda_home }} creates={{ anaconda_home }} executable=/bin/bash
+  notify:
+    - remove anaconda setup script
+
+- name: Add anaconda to the PATH
+  shell: "echo '{{ item }}' >> /etc/profile executable=/bin/bash"
+  with_items:
+  - "export PATH={{ anaconda_home }}/bin:$PATH"
+
+- name: Download Jupyter Scala binaries
+  command: wget https://oss.sonatype.org/content/repositories/snapshots/com/github/alexarchambault/jupyter/jupyter-scala-cli_2.11.6/0.2.0-SNAPSHOT/jupyter-scala_2.11.6-0.2.0-SNAPSHOT.tar.xz -O /tmp/js.tar.xz
+  when: python_version == "python3"
+
+- name: Unarchive Jupyter Scala binaries
+  command: unxz /tmp/js.tar.xz
+  when: python_version == "python3"
+
+- name: Untar Jupyter Scala binaries
+  command: tar xf /tmp/js.tar -C /opt
+  when: python_version == "python3"
+
+
+#- name: Update conda to latest version
+#  shell: "{{ anaconda_home }}/bin/conda update conda --yes -q executable=/bin/bash"
+
+#- name: Update Anaconda packages.
+#  command: "{{ anaconda_home }}/bin/conda update anaconda"
+
+- name: Install pip
+  shell: "{{ anaconda_home }}/bin/conda install pip --yes -q executable=/bin/bash"
+
+- name: Install jupyter
+  shell: "{{ anaconda_home }}/bin/conda install jupyter --yes -q executable=/bin/bash"
+
+- name: Creates directory /home/vagrant/.jupyiter
+  file: path=/home/vagrant/.jupyter state=directory mode=0700 owner=vagrant group=vagrant
+
+- name: Configure jupyter notebook
+  template: src=jupyter_notebook_config.py.j2
+            dest=/home/vagrant/.jupyter/jupyter_notebook_config.py
+            mode=0664
+            owner=vagrant group=vagrant
+
+- name: Install Jupyter Scala binaries
+  command: /opt/jupyter-scala_2.11.6-0.2.0-SNAPSHOT/bin/jupyter-scala
+  sudo: yes
+  sudo_user: vagrant
+  when: python_version == "python3"
+
+- name: Copy jupyter script
+  template: src=spark_notebook.py.j2
+            dest=/home/vagrant/spark_notebook.py
+            mode=0755
+            owner=vagrant group=vagrant
+
+- name: Copy jupyter notebook conf to upstart directory
+  template: src=notebook.conf.j2
+            dest=/etc/init/notebook.conf
+            mode=0644
+
+- name: Start jupyter notebook.
+  command: start notebook
+
